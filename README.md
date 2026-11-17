@@ -63,6 +63,9 @@ address it listens on.
 | `/api/sdks` | each bound SDK, with its `metrics` counters |
 
 Everything the server writes passes through the Station's `redact()`.
+A stream reader that falls more than `maxBuffered` bytes behind, 1 MiB by
+default, is cut off; an `EventSource` reconnects by itself, and resumes
+after the last record it read.
 
 ## Develop
 

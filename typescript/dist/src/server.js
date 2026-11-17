@@ -1,9 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listen = listen;
+exports.hostok = hostok;
 const crypto_1 = require("crypto");
 const http_1 = require("http");
 const page_1 = require("./page");
+// A stream subscriber whose unsent output passes this is cut off; its
+// client reconnects from the last id it read.
+const MAX_BUFFERED = 1 << 20;
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1'];
 // A loopback server, read-only. It answers only a Host it is reachable
 // as, so a page elsewhere cannot rebind a name onto it.
@@ -22,7 +26,13 @@ function listen(feed, opts = {}) {
             res.setHeader('Allow', 'GET, HEAD');
             return send(res, 405, 'text/plain', 'read-only\n');
         }
-        const url = new URL(req.url || '/', 'http://localhost');
+        let url;
+        try {
+            url = new URL(req.url || '/', 'http://localhost');
+        }
+        catch (_err) {
+            return send(res, 400, 'text/plain', 'bad request target\n');
+        }
         if ('/' === url.pathname) {
             const nonce = (0, crypto_1.randomBytes)(16).toString('base64');
             res.setHeader('Content-Security-Policy', "default-src 'none'; connect-src 'self'; script-src 'nonce-" + nonce +
@@ -46,15 +56,30 @@ function listen(feed, opts = {}) {
             'Cache-Control': 'no-store',
             'X-Content-Type-Options': 'nosniff',
         });
+        if ('HEAD' === req.method) {
+            res.end();
+            return;
+        }
         res.write(': open\n\n');
-        const out = (rec) => res.write('id: ' + rec.seq + '\ndata: ' + feed.redact(JSON.stringify(rec)) + '\n\n');
+        const max = opts.maxBuffered ?? MAX_BUFFERED;
+        let stop = () => { };
+        const out = (rec) => {
+            res.write('id: ' + rec.seq + '\ndata: ' + feed.redact(JSON.stringify(rec)) + '\n\n');
+            if (max < res.writableLength) {
+                stop();
+                res.destroy();
+            }
+        };
         const since = Number(req.headers['last-event-id'] ?? url.searchParams.get('since') ?? 0);
         for (const rec of feed.records({ since: Number.isFinite(since) ? since : 0 })) {
             out(rec);
         }
-        const stop = feed.subscribe(out);
+        if (res.destroyed) {
+            return;
+        }
+        stop = feed.subscribe(out);
         streams.add(res);
-        req.on('close', () => { stop(); streams.delete(res); });
+        res.on('close', () => { stop(); streams.delete(res); });
     }
     return new Promise((resolve, reject) => {
         server.once('error', reject);
@@ -76,9 +101,13 @@ function listen(feed, opts = {}) {
         });
     });
 }
+// A client leaves the port out of Host when it is HTTP's own.
 function hostok(req, port) {
     const given = String(req.headers.host ?? '');
-    return LOOPBACK.some((name) => given === name + ':' + port || given === '[' + name + ']:' + port);
+    return LOOPBACK.some((name) => {
+        const named = name.includes(':') ? '[' + name + ']' : name;
+        return given === named + ':' + port || (80 === port && given === named);
+    });
 }
 function send(res, status, type, body) {
     res.writeHead(status, {

@@ -2,11 +2,13 @@
 import { beforeEach, test } from 'node:test'
 import * as Assert from 'node:assert'
 import { request } from 'node:http'
+import * as Net from 'node:net'
 
 import * as StationLib from '@voxgig/station'
 import { Station } from '@voxgig/station'
 
 import { StationView, select } from '../src'
+import { hostok, listen } from '../src/server'
 
 import { FEATURES, fakeSDK } from './support'
 
@@ -177,4 +179,83 @@ test('the stream sends the records after the one asked for, then each new one', 
   Assert.ok(events.every((e) => first < e.seq))
   await live.close()
   st.close()
+})
+
+// A feed the server tests drive directly, counting live subscriptions.
+function feedof(records: any[] = []) {
+  const subs = new Set<(rec: any) => void>()
+  return {
+    subs,
+    feed: {
+      records: (filter: any = {}) => records.filter((r) => null == filter.since || filter.since < r.seq),
+      subscribe: (fn: (rec: any) => void) => { subs.add(fn); return () => { subs.delete(fn) } },
+      sdks: () => [],
+      redact: (text: string) => text,
+    },
+  }
+}
+
+function raw(port: number, text: string, pause = false): Promise<{ head: string, closed: Promise<void>, socket: Net.Socket }> {
+  return new Promise((resolve) => {
+    const socket = Net.connect(port, '127.0.0.1', () => socket.write(text))
+    let got = ''
+    const closed = new Promise<void>((done) => socket.on('close', () => done()))
+    socket.once('data', (d) => {
+      got += d.toString('utf8')
+      if (pause) { socket.pause() }
+      resolve({ head: got.split('\r\n')[0], closed, socket })
+    })
+  })
+}
+
+test('a request target that does not parse is a 400, and the server stays up', async () => {
+  const { feed } = feedof()
+  const live = await listen(feed)
+  try {
+    const bad = await raw(live.port, 'GET // HTTP/1.1\r\nHost: 127.0.0.1:' + live.port + '\r\n\r\n')
+    Assert.strictEqual(bad.head, 'HTTP/1.1 400 Bad Request')
+    bad.socket.destroy()
+    Assert.strictEqual((await get(live.port, '/api/sdks')).status, 200)
+  }
+  finally { await live.close() }
+})
+
+test('HEAD on the stream answers with its headers and opens no subscription', async () => {
+  const { feed, subs } = feedof()
+  const live = await listen(feed)
+  try {
+    const head = await get(live.port, '/api/stream', undefined, 'HEAD')
+    Assert.strictEqual(head.status, 200)
+    Assert.strictEqual(head.headers['content-type'], 'text/event-stream')
+    Assert.strictEqual(subs.size, 0)
+  }
+  finally { await live.close() }
+})
+
+test('a stream reader that stops reading is cut off once its unsent output passes the bound', async () => {
+  const { feed, subs } = feedof()
+  const live = await listen(feed, { maxBuffered: 64 * 1024 })
+  try {
+    const reader = await raw(live.port,
+      'GET /api/stream HTTP/1.1\r\nHost: 127.0.0.1:' + live.port + '\r\n\r\n', true)
+    Assert.strictEqual(reader.head, 'HTTP/1.1 200 OK')
+    Assert.strictEqual(subs.size, 1)
+    const big = 'x'.repeat(16 * 1024)
+    for (let seq = 1; seq <= 2000 && 0 < subs.size; seq++) {
+      for (const fn of [...subs]) { fn({ seq, detail: big }) }
+    }
+    Assert.strictEqual(subs.size, 0, 'the subscription is released')
+    reader.socket.resume()
+    await reader.closed
+  }
+  finally { await live.close() }
+})
+
+test('a Host may leave the port out only when it is HTTP\'s own', () => {
+  Assert.strictEqual(hostok({ headers: { host: '127.0.0.1' } }, 80), true)
+  Assert.strictEqual(hostok({ headers: { host: '[::1]' } }, 80), true)
+  Assert.strictEqual(hostok({ headers: { host: 'localhost:80' } }, 80), true)
+  Assert.strictEqual(hostok({ headers: { host: '127.0.0.1' } }, 8080), false)
+  Assert.strictEqual(hostok({ headers: { host: 'evil.test' } }, 80), false)
+  Assert.strictEqual(hostok({ headers: { host: '[::1]:8080' } }, 8080), true)
 })
