@@ -251,6 +251,36 @@ test('a stream reader that stops reading is cut off once its unsent output passe
   finally { await live.close() }
 })
 
+test('a reader that keeps reading gets the whole backlog, however large', async () => {
+  const big = 'x'.repeat(2048)
+  const { feed } = feedof(Array.from({ length: 1000 }, (_, i) => ({ seq: i + 1, detail: big })))
+  const live = await listen(feed)
+  try {
+    const seqs: number[] = await new Promise((resolve, reject) => {
+      const got: number[] = []
+      const req = request({ host: '127.0.0.1', port: live.port, path: '/api/stream?since=0',
+        headers: { host: '127.0.0.1:' + live.port } }, (res) => {
+        res.setEncoding('utf8')
+        let pending = ''
+        res.on('data', (chunk) => {
+          pending += chunk
+          const frames = pending.split('\n\n')
+          pending = frames.pop() as string
+          for (const f of frames) {
+            const id = /^id: (\d+)$/m.exec(f)
+            if (id) { got.push(Number(id[1])) }
+          }
+          if (1000 === got.length) { req.destroy(); resolve(got) }
+        })
+      })
+      req.on('error', (err: any) => ('ECONNRESET' === err.code && 1000 === got.length ? resolve(got) : reject(err)))
+      req.end()
+    })
+    Assert.deepStrictEqual(seqs, Array.from({ length: 1000 }, (_, i) => i + 1))
+  }
+  finally { await live.close() }
+})
+
 test('a Host may leave the port out only when it is HTTP\'s own', () => {
   Assert.strictEqual(hostok({ headers: { host: '127.0.0.1' } }, 80), true)
   Assert.strictEqual(hostok({ headers: { host: '[::1]' } }, 80), true)
