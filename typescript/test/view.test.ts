@@ -8,6 +8,7 @@ import * as StationLib from '@voxgig/station'
 import { Station } from '@voxgig/station'
 
 import { StationView, select } from '../src'
+import { makecollector } from '../src/collect'
 import { hostok, listen, outbox } from '../src/server'
 
 import { FEATURES, fakeSDK } from './support'
@@ -104,6 +105,29 @@ test('the view keeps the newest records, counts what it dropped, and switches on
   Assert.ok(view.records().every((r: any) => 'debug' === r.source))
   Assert.strictEqual(view.snapshot().dropped, view.records()[0].seq - 1)
   st.close()
+})
+
+test('a station event is read as station writes it, and a debug path as the SDK sends it', () => {
+  const c = makecollector()
+  const op = c.station({ t: 1, kind: 'op', plugin: 'solar$a', api: 'solar',
+    op: { entity: 'planet', op: 'list', outcome: 'ok', durationMs: 12 } })
+  Assert.deepStrictEqual([op.op, op.ok, op.ms], ['planet.list', true, 12])
+  const failed = c.station({ t: 2, kind: 'op', plugin: 'solar$a',
+    op: { entity: 'planet', op: 'load', outcome: 'err', durationMs: 3 } })
+  Assert.deepStrictEqual([failed.op, failed.ok], ['planet.load', false])
+  const error = c.station({ t: 3, kind: 'error', plugin: 'solar$a', err: { status: 404, message: 'no planet' } })
+  Assert.deepStrictEqual([error.op, error.status, error.ok], [undefined, 404, false])
+  const http = c.station({ t: 4, kind: 'http', plugin: 'solar$a',
+    http: { method: 'GET', host: 'api.test', path: '/api/planet', status: 200, durationMs: 9, bytes: 10 } })
+  Assert.deepStrictEqual([http.op, http.path, http.status, http.ok, http.ms],
+    [undefined, '/api/planet', 200, true, 9])
+  Assert.deepStrictEqual(c.records({ op: 'planet.list' }).map((r) => r.seq), [op.seq])
+
+  const call = c.add('debug', { name: 'solar$a' },
+    { op: 'planet.list', method: 'GET', url: 'api/planet?q=1', status: 200, ok: true, durationMs: 9 })
+  Assert.strictEqual(call.path, '/api/planet')
+  const route = c.add('debug', { name: 'solar$a' }, { op: 'planet.load', method: 'GET', url: 'api/planet/{id}' })
+  Assert.strictEqual(route.path, '/api/planet/{id}')
 })
 
 test('the page and the API are served on loopback, read-only, to a loopback Host only', async () => {

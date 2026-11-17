@@ -65,18 +65,19 @@ export function makecollector(max = 1000): Collector {
 
     station(ev) {
       const http = ev?.http || {}
+      const op = null != ev?.op && 'object' === typeof ev.op ? ev.op : {}
       return keep({
         t: num(ev?.t) ?? Date.now(),
         source: 'station',
         kind: String(ev?.kind ?? ''),
         sdk: ev?.plugin,
         api: ev?.api,
-        op: ev?.op,
+        op: null == op.op ? undefined : (null == op.entity ? '' : op.entity + '.') + op.op,
         method: http.method,
         path: http.path,
-        status: num(http.status),
-        ok: null == http.status ? undefined : 0 < http.status && http.status < 400,
-        ms: num(http.durationMs),
+        status: num(http.status) ?? num(ev?.err?.status),
+        ok: stationok(ev),
+        ms: num(http.durationMs) ?? num(op.durationMs),
         detail: ev,
       })
     },
@@ -132,10 +133,25 @@ function statusmatch(want: string | undefined, rec: TrafficRecord): boolean {
   return String(rec.status) === want
 }
 
+// An `op` event settles with its outcome: ok, err, unexpected or unknown.
+function stationok(ev: any): boolean | undefined {
+  const status = ev?.http?.status
+  if (null != status) { return 0 < status && status < 400 }
+  if ('error' === ev?.kind) { return false }
+  const outcome = ev?.op?.outcome
+  return 'ok' === outcome ? true : ('err' === outcome || 'unexpected' === outcome ? false : undefined)
+}
+
+// A debug entry's URL may be relative to the SDK's base, and may still
+// hold the route's parameters, which a URL parse would percent-encode.
 function pathof(url: any): string | undefined {
   if ('string' !== typeof url) { return undefined }
-  try { return new URL(url).pathname }
-  catch (_err) { return url }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+    try { return new URL(url).pathname }
+    catch (_err) { return url }
+  }
+  const path = url.replace(/[?#].*$/, '')
+  return path.startsWith('/') ? path : '/' + path
 }
 
 function num(v: any): number | undefined {
