@@ -1,7 +1,7 @@
 {
   "name": "@voxgig/station-view",
   "version": "0.0.1",
-  "description": "A voxgig/station extension: a view of a Station's state. A stub for now.",
+  "description": "A voxgig/station extension: a local page for watching and filtering the API traffic of the SDKs a Station builds.",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/voxgig/station-view.git", "directory": "typescript" },
   "type": "commonjs",
@@ -11,6 +11,9 @@
   "scripts": {
     "build": "tsc",
     "test": "node ../tools/comment-gate.cjs && npm run build && node --test \"dist/test/*.test.js\""
+  },
+  "peerDependencies": {
+    "@voxgig/station": ">=0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -3,7 +3,25 @@
 station-view is a plugin for [voxgig/station](https://github.com/voxgig/station):
 station loads it when a caller hands it the definition, and never otherwise.
 It follows station's family layout: one directory per language, TypeScript
-canonical. Only `typescript/` exists so far, and it is a stub.
+canonical. Only `typescript/` exists so far.
+
+It switches sdkgen's `telemetry`, `debug`, `audit` and `metrics` features on in
+each SDK a Station builds, through station's `sdk.feature` point and its
+`withfeature` helper, and collects what they report beside the Station's own
+events. It serves a page and a read-only JSON API on loopback. Three rules hold
+it together, and each has a test that fails without it:
+
+- an SDK is never handed a feature it was not generated with;
+- the server answers only a loopback `Host`, so a page elsewhere cannot rebind
+  a name onto it;
+- everything the server writes passes through the Station's `redact()`.
+
+The page's script runs under a per-response nonce and writes values as text,
+never as markup.
+
+Its tests link a station checkout (`STATION_HOME`, else `../station`) in place
+of the published package, because they need station's extension points before
+a release carries them. `make build` does the linking.
 
 ## Building and testing
 
