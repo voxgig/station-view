@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listen = listen;
+exports.outbox = outbox;
 exports.hostok = hostok;
 const crypto_1 = require("crypto");
 const http_1 = require("http");
@@ -66,33 +67,21 @@ function listen(feed, opts = {}) {
         const since = Number(req.headers['last-event-id'] ?? url.searchParams.get('since') ?? 0);
         // The backlog drains at the reader's pace; only live records queued
         // behind a reader that has stopped reading count against the bound.
-        const backlog = feed.records({ since: Number.isFinite(since) ? since : 0 }).map(frame);
-        let next = 0;
-        const live = [];
-        let queued = 0;
+        const box = outbox(feed.records({ since: Number.isFinite(since) ? since : 0 }).map(frame));
         let flowing = true;
         const pump = () => {
             flowing = true;
-            while (flowing && (next < backlog.length || 0 < live.length)) {
-                let chunk;
-                if (next < backlog.length) {
-                    chunk = backlog[next++];
-                }
-                else {
-                    chunk = live.shift();
-                    queued -= chunk.length;
-                }
+            let chunk = flowing ? box.take() : undefined;
+            while (undefined !== chunk) {
                 flowing = res.write(chunk);
+                chunk = flowing ? box.take() : undefined;
             }
             if (!flowing) {
                 res.once('drain', pump);
             }
         };
         const stop = feed.subscribe((rec) => {
-            const chunk = frame(rec);
-            live.push(chunk);
-            queued += chunk.length;
-            if (max < queued) {
+            if (max < box.push(frame(rec))) {
                 stop();
                 res.destroy();
                 return;
@@ -124,6 +113,38 @@ function listen(feed, opts = {}) {
             });
         });
     });
+}
+// The frames one stream reader has yet to receive: its backlog, released
+// as it is written, then live frames, counted in bytes on the wire.
+function outbox(backlog) {
+    let replay = backlog;
+    let next = 0;
+    const live = [];
+    let queued = 0;
+    return {
+        take() {
+            if (next < replay.length) {
+                const chunk = replay[next];
+                replay[next++] = '';
+                if (next === replay.length) {
+                    replay = [];
+                    next = 0;
+                }
+                return chunk;
+            }
+            const chunk = live.shift();
+            if (undefined !== chunk) {
+                queued -= Buffer.byteLength(chunk, 'utf8');
+            }
+            return chunk;
+        },
+        push(chunk) {
+            live.push(chunk);
+            queued += Buffer.byteLength(chunk, 'utf8');
+            return queued;
+        },
+        held: () => replay.length + live.length,
+    };
 }
 // A client leaves the port out of Host when it is HTTP's own.
 function hostok(req, port) {
