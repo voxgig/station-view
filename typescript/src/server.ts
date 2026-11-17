@@ -74,20 +74,45 @@ export function listen(feed: Feed, opts: ListenOptions = {}): Promise<Listening>
     if ('HEAD' === req.method) { res.end(); return }
     res.write(': open\n\n')
     const max = opts.maxBuffered ?? MAX_BUFFERED
-    let stop = () => {}
-    const out = (rec: any) => {
-      res.write('id: ' + rec.seq + '\ndata: ' + feed.redact(JSON.stringify(rec)) + '\n\n')
-      if (max < res.writableLength) {
+    const frame = (rec: any) => 'id: ' + rec.seq + '\ndata: ' + feed.redact(JSON.stringify(rec)) + '\n\n'
+    const since = Number(req.headers['last-event-id'] ?? url.searchParams.get('since') ?? 0)
+
+    // The backlog drains at the reader's pace; only live records queued
+    // behind a reader that has stopped reading count against the bound.
+    const backlog = feed.records({ since: Number.isFinite(since) ? since : 0 }).map(frame)
+    let next = 0
+    const live: string[] = []
+    let queued = 0
+    let flowing = true
+
+    const pump = () => {
+      flowing = true
+      while (flowing && (next < backlog.length || 0 < live.length)) {
+        let chunk: string
+        if (next < backlog.length) { chunk = backlog[next++] }
+        else {
+          chunk = live.shift() as string
+          queued -= chunk.length
+        }
+        flowing = res.write(chunk)
+      }
+      if (!flowing) { res.once('drain', pump) }
+    }
+
+    const stop = feed.subscribe((rec) => {
+      const chunk = frame(rec)
+      live.push(chunk)
+      queued += chunk.length
+      if (max < queued) {
         stop()
         res.destroy()
+        return
       }
-    }
-    const since = Number(req.headers['last-event-id'] ?? url.searchParams.get('since') ?? 0)
-    for (const rec of feed.records({ since: Number.isFinite(since) ? since : 0 })) { out(rec) }
-    if (res.destroyed) { return }
-    stop = feed.subscribe(out)
+      if (flowing) { pump() }
+    })
     streams.add(res)
     res.on('close', () => { stop(); streams.delete(res) })
+    pump()
   }
 
   return new Promise((resolve, reject) => {
