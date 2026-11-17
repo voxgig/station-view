@@ -13,5 +13,11 @@ export type Listening = {
 export type ListenOptions = {
     port?: number;
     host?: string;
+    maxBuffered?: number;
 };
 export declare function listen(feed: Feed, opts?: ListenOptions): Promise<Listening>;
+export declare function hostok(req: {
+    headers: {
+        host?: string;
+    };
+}, port: number): boolean;
