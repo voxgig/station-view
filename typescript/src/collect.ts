@@ -142,11 +142,16 @@ function stationok(ev: any): boolean | undefined {
   return 'ok' === outcome ? true : ('err' === outcome || 'unexpected' === outcome ? false : undefined)
 }
 
-// A debug entry's URL may be relative to the SDK's base.
+// A debug entry's URL may be relative to the SDK's base, and may still
+// hold the route's parameters, which a URL parse would percent-encode.
 function pathof(url: any): string | undefined {
   if ('string' !== typeof url) { return undefined }
-  try { return new URL(url, 'http://localhost/').pathname }
-  catch (_err) { return url }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+    try { return new URL(url).pathname }
+    catch (_err) { return url }
+  }
+  const path = url.replace(/[?#].*$/, '')
+  return path.startsWith('/') ? path : '/' + path
 }
 
 function num(v: any): number | undefined {

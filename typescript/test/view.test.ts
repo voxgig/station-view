@@ -126,6 +126,8 @@ test('a station event is read as station writes it, and a debug path as the SDK 
   const call = c.add('debug', { name: 'solar$a' },
     { op: 'planet.list', method: 'GET', url: 'api/planet?q=1', status: 200, ok: true, durationMs: 9 })
   Assert.strictEqual(call.path, '/api/planet')
+  const route = c.add('debug', { name: 'solar$a' }, { op: 'planet.load', method: 'GET', url: 'api/planet/{id}' })
+  Assert.strictEqual(route.path, '/api/planet/{id}')
 })
 
 test('the page and the API are served on loopback, read-only, to a loopback Host only', async () => {
