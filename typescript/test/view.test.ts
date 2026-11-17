@@ -8,7 +8,7 @@ import * as StationLib from '@voxgig/station'
 import { Station } from '@voxgig/station'
 
 import { StationView, select } from '../src'
-import { hostok, listen } from '../src/server'
+import { hostok, listen, outbox } from '../src/server'
 
 import { FEATURES, fakeSDK } from './support'
 
@@ -279,6 +279,22 @@ test('a reader that keeps reading gets the whole backlog, however large', async 
     Assert.deepStrictEqual(seqs, Array.from({ length: 1000 }, (_, i) => i + 1))
   }
   finally { await live.close() }
+})
+
+test('a stream reader\'s outbox lets go of its backlog as it is written, and counts bytes', () => {
+  const box = outbox(['a', 'b', 'c'])
+  Assert.strictEqual(box.held(), 3)
+  Assert.deepStrictEqual([box.take(), box.take()], ['a', 'b'])
+  Assert.strictEqual(box.take(), 'c')
+  Assert.strictEqual(box.held(), 0)
+  Assert.strictEqual(box.take(), undefined)
+
+  const wide = '\u6f22'.repeat(50000)
+  Assert.strictEqual(box.push(wide), 150000)
+  Assert.strictEqual(box.push('ab'), 150002)
+  Assert.strictEqual(box.take(), wide)
+  Assert.strictEqual(box.push('c'), 3)
+  Assert.strictEqual(box.held(), 2)
 })
 
 test('a Host may leave the port out only when it is HTTP\'s own', () => {

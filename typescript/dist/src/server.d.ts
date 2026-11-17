@@ -16,6 +16,11 @@ export type ListenOptions = {
     maxBuffered?: number;
 };
 export declare function listen(feed: Feed, opts?: ListenOptions): Promise<Listening>;
+export declare function outbox(backlog: string[]): {
+    take(): string | undefined;
+    push(chunk: string): number;
+    held(): number;
+};
 export declare function hostok(req: {
     headers: {
         host?: string;

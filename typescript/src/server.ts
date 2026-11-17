@@ -79,31 +79,21 @@ export function listen(feed: Feed, opts: ListenOptions = {}): Promise<Listening>
 
     // The backlog drains at the reader's pace; only live records queued
     // behind a reader that has stopped reading count against the bound.
-    const backlog = feed.records({ since: Number.isFinite(since) ? since : 0 }).map(frame)
-    let next = 0
-    const live: string[] = []
-    let queued = 0
+    const box = outbox(feed.records({ since: Number.isFinite(since) ? since : 0 }).map(frame))
     let flowing = true
 
     const pump = () => {
       flowing = true
-      while (flowing && (next < backlog.length || 0 < live.length)) {
-        let chunk: string
-        if (next < backlog.length) { chunk = backlog[next++] }
-        else {
-          chunk = live.shift() as string
-          queued -= chunk.length
-        }
+      let chunk = flowing ? box.take() : undefined
+      while (undefined !== chunk) {
         flowing = res.write(chunk)
+        chunk = flowing ? box.take() : undefined
       }
       if (!flowing) { res.once('drain', pump) }
     }
 
     const stop = feed.subscribe((rec) => {
-      const chunk = frame(rec)
-      live.push(chunk)
-      queued += chunk.length
-      if (max < queued) {
+      if (max < box.push(frame(rec))) {
         stop()
         res.destroy()
         return
@@ -132,6 +122,41 @@ export function listen(feed: Feed, opts: ListenOptions = {}): Promise<Listening>
       })
     })
   })
+}
+
+// The frames one stream reader has yet to receive: its backlog, released
+// as it is written, then live frames, counted in bytes on the wire.
+export function outbox(backlog: string[]): {
+  take(): string | undefined
+  push(chunk: string): number
+  held(): number
+} {
+  let replay = backlog
+  let next = 0
+  const live: string[] = []
+  let queued = 0
+  return {
+    take() {
+      if (next < replay.length) {
+        const chunk = replay[next]
+        replay[next++] = ''
+        if (next === replay.length) {
+          replay = []
+          next = 0
+        }
+        return chunk
+      }
+      const chunk = live.shift()
+      if (undefined !== chunk) { queued -= Buffer.byteLength(chunk, 'utf8') }
+      return chunk
+    },
+    push(chunk) {
+      live.push(chunk)
+      queued += Buffer.byteLength(chunk, 'utf8')
+      return queued
+    },
+    held: () => replay.length + live.length,
+  }
 }
 
 // A client leaves the port out of Host when it is HTTP's own.
