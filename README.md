@@ -69,14 +69,12 @@ after the last record it read.
 
 ## Develop
 
-The package is not on npm. It takes `@voxgig/station` as a peer
-dependency, at the version that carries station's extension points. The
-tests run against a voxgig/station checkout, `STATION_HOME` or a sibling
-`../station`, which `make build` links into `node_modules`; build that
-checkout first.
+The package is not on npm. It takes `@voxgig/station` 0.4.0 or later as
+a peer dependency, the first release that carries station's extension
+points, and its tests run against npm's station.
 
 ```sh
-make test      # install, link station, build, test, comment gate, stale dist/ check
+make test      # install, build, test, comment gate, stale dist/ check
 ```
 
 One test drives the page in Chromium through Playwright where Playwright

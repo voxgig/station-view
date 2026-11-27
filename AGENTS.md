@@ -19,9 +19,8 @@ it together, and each has a test that fails without it:
 The page's script runs under a per-response nonce and writes values as text,
 never as markup.
 
-Its tests link a station checkout (`STATION_HOME`, else `../station`) in place
-of the published package, because they need station's extension points before
-a release carries them. `make build` does the linking.
+Its tests run against npm's station, 0.4.0 or later, the first release that
+carries station's extension points.
 
 ## Building and testing
 
