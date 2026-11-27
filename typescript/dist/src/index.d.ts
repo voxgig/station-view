@@ -1,7 +1,10 @@
 import { select } from './collect';
 import type { Filter, Source, TrafficRecord } from './collect';
+import { defaultlog, followlog, logpath, readlog } from './log';
 import type { Listening, ListenOptions } from './server';
-export { select };
+export { defaultlog, followlog, logpath, readlog, select };
+export { servelog } from './cli';
+export type { ServeLogOptions } from './cli';
 export type { Filter, Listening, ListenOptions, Source, TrafficRecord };
 export type StationLike = {
     status(): {
@@ -30,6 +33,8 @@ export type BoundSdk = {
 export type ViewOptions = {
     max?: number;
     features?: string[];
+    log?: string | boolean;
+    logMax?: number;
 };
 export type View = {
     records(filter?: Filter): TrafficRecord[];
@@ -51,6 +56,7 @@ export type View = {
     };
     listen(opts?: ListenOptions): Promise<Listening>;
     follow(): () => void;
+    logfile(): string | undefined;
 };
 export declare function makeview(station: StationLike, options?: ViewOptions): View & {
     watch(feature: any, info: any): any;

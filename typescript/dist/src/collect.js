@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.makecollector = makecollector;
 exports.select = select;
+const log_1 = require("./log");
 function makecollector(max = 1000) {
     const ring = [];
     const subs = new Set();
@@ -42,6 +43,13 @@ function makecollector(max = 1000) {
                 ms: num(http.durationMs) ?? num(op.durationMs),
                 detail: ev,
             });
+        },
+        logged(line) {
+            if (null == line || 'object' !== typeof line || log_1.LOG_VERSION !== line.v || 'string' !== typeof line.source) {
+                return undefined;
+            }
+            const { v: _v, seq: _seq, ...rec } = line;
+            return keep({ ...rec, t: num(rec.t) ?? Date.now(), detail: rec.detail });
         },
         records: (filter) => select(ring, filter || {}),
         subscribe(fn) {

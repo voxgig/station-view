@@ -13,6 +13,8 @@ export type TrafficRecord = {
     ok?: boolean;
     ms?: number;
     detail: any;
+    run?: string;
+    pid?: number;
 };
 export type Filter = {
     source?: string;
@@ -29,6 +31,7 @@ export type Watched = {
 export type Collector = {
     add(source: Source, from: Watched, raw: any): TrafficRecord;
     station(ev: any): TrafficRecord;
+    logged(line: any): TrafficRecord | undefined;
     records(filter?: Filter): TrafficRecord[];
     subscribe(fn: (rec: TrafficRecord) => void): () => void;
     dropped(): number;

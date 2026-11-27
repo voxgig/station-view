@@ -1,11 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StationView = exports.select = void 0;
+exports.StationView = exports.servelog = exports.select = exports.readlog = exports.logpath = exports.followlog = exports.defaultlog = void 0;
 exports.makeview = makeview;
 const station_1 = require("@voxgig/station");
 const collect_1 = require("./collect");
 Object.defineProperty(exports, "select", { enumerable: true, get: function () { return collect_1.select; } });
+const log_1 = require("./log");
+Object.defineProperty(exports, "defaultlog", { enumerable: true, get: function () { return log_1.defaultlog; } });
+Object.defineProperty(exports, "followlog", { enumerable: true, get: function () { return log_1.followlog; } });
+Object.defineProperty(exports, "logpath", { enumerable: true, get: function () { return log_1.logpath; } });
+Object.defineProperty(exports, "readlog", { enumerable: true, get: function () { return log_1.readlog; } });
 const server_1 = require("./server");
+var cli_1 = require("./cli");
+Object.defineProperty(exports, "servelog", { enumerable: true, get: function () { return cli_1.servelog; } });
 // The sdkgen features the view switches on, and the option each one
 // hands its records to.
 const CALLBACK = {
@@ -18,6 +25,13 @@ function makeview(station, options = {}) {
     const collector = (0, collect_1.makecollector)(options.max ?? 1000);
     const features = (options.features ?? Object.keys(CALLBACK)).filter((f) => f in CALLBACK);
     const bound = [];
+    // Each record also goes to the log, redacted, for a viewer that outlives
+    // this process (`station-view`).
+    const where = (0, log_1.logpath)(options.log);
+    if (undefined !== where) {
+        const log = (0, log_1.makelog)(where, (text) => station.redact(text), options.logMax);
+        collector.subscribe((rec) => log.write(rec));
+    }
     const view = {
         records: (filter) => collector.records(filter),
         sdks: () => bound.map((sdk) => ({
@@ -59,6 +73,7 @@ function makeview(station, options = {}) {
             return out;
         },
         bound(sdk) { bound.push(sdk); },
+        logfile: () => where,
     };
     return view;
 }
