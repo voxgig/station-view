@@ -209,6 +209,60 @@ test('a log others can read is narrowed to its owner, and a link or another user
     }
   })
 
+test('a log is checked before it rotates: a readable one is narrowed first, another user\'s is not moved',
+  { skip: 'win32' === process.platform }, () => {
+    const { dir, log } = tmplog()
+    const full = 'x'.repeat(590) + '\n'
+    try {
+      Fs.mkdirSync(Path.dirname(log), { recursive: true })
+      Fs.writeFileSync(log, full)
+      Fs.chmodSync(log, 0o644)
+      makelog(log, (text) => text, 600).write(rec(1))
+      Assert.strictEqual(Fs.readFileSync(log + '.1', 'utf8'), full)
+      Assert.strictEqual(Fs.statSync(log + '.1').mode & 0o777, 0o600)
+      Assert.deepStrictEqual(lines(log).map((l) => l.detail.i), [1])
+
+      if (0 === process.getuid?.()) {
+        const theirs = Path.join(dir, 'theirs.jsonl')
+        Fs.writeFileSync(theirs, full)
+        Fs.chownSync(theirs, 12345, 12345)
+        makelog(theirs, (text) => text, 600).write(rec(2))
+        Assert.strictEqual(Fs.existsSync(theirs + '.1'), false)
+        Assert.strictEqual(Fs.readFileSync(theirs, 'utf8'), full)
+      }
+    }
+    finally {
+      Fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+test('the command outlasts a log it cannot read, and reads the one that replaces it', async () => {
+  const { dir, log } = tmplog()
+  try {
+    const writer = makelog(log, (text) => text)
+    writer.write(rec(0))
+    const live = await servelog({ log, port: 0, every: 10 })
+    try {
+      const seen = async () => JSON.parse((await get(live.port, '/api/records')).body).map((r: any) => r.detail.i)
+      Assert.deepStrictEqual(await seen(), [0])
+
+      Fs.renameSync(log, log + '.away')
+      Fs.mkdirSync(log)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      Fs.rmdirSync(log)
+      writer.write(rec(1))
+      await until('the record in the replacement', async () => 2 === (await seen()).length)
+      Assert.deepStrictEqual(await seen(), [0, 1])
+    }
+    finally {
+      await live.close()
+    }
+  }
+  finally {
+    Fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('the log is named by the option, else by STATION_VIEW_LOG, and is off by default', () => {
   Assert.strictEqual(logpath(undefined, {}), undefined)
   Assert.strictEqual(logpath(false, { STATION_VIEW_LOG: '/tmp/x.jsonl' }), undefined)

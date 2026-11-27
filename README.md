@@ -93,7 +93,8 @@ Each record is one JSON line, passed through the Station's `redact()` and
 written before the call that made it returns. The file is created
 readable and writable by its owner only, in a directory only its owner
 can enter. An existing file that others can read is narrowed to its
-owner; a symbolic link, or a file another user owns, is not written to.
+owner before it is written or moved to `.1`; a symbolic link, or a file
+another user owns, is neither written to nor moved.
 Each line carries `v`, the format's version, and `run` and `pid`, which
 name the process that wrote it. Past 10 MiB (`logMax`), the log moves to
 `<file>.1`, replacing an earlier one, and a new log starts. Two
@@ -105,7 +106,8 @@ station-view [--log <file>] [--port <n>] [--host <loopback>]
 
 The command reads `<file>.1`, then `<file>`, then polls for what is
 appended, and serves the page and the API above, on port 8960 by default
-and on loopback only. It redacts nothing itself: it holds no secrets, and
+and on loopback only. A poll that cannot read the log waits for the
+next one. The command redacts nothing itself: it holds no secrets, and
 the log holds only what each process already redacted. It numbers
 records as it reads them, so `seq` is the command's own, and `/api/sdks`
 reports `metrics` as `null`, since those counters live in a client the
