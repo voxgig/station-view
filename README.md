@@ -67,6 +67,51 @@ A stream reader that falls more than `maxBuffered` bytes behind, 1 MiB by
 default, is cut off; an `EventSource` reconnects by itself, and resumes
 after the last record it read.
 
+## A record log, and the `station-view` command
+
+A view's records last as long as its process, and a command-line tool
+that exits at once leaves nothing to look at. So a view can also append
+each record to a log, and the `station-view` command serves the same page
+from that log: what earlier processes wrote, then each record as it
+arrives.
+
+```ts
+station.use(StationView, { log: true })    // ~/.voxgig/station-view/records.jsonl
+```
+
+| `log` | the log |
+| --- | --- |
+| `true` | `~/.voxgig/station-view/records.jsonl` |
+| a path | that file |
+| `false` | none, whatever the environment says |
+| unset | `STATION_VIEW_LOG` decides: `1` or `true` for the default file, any other value for a path, and no log when it is unset or empty |
+
+So `STATION_VIEW_LOG=1 node app.js` logs an application that loads the
+view, with no change to its code.
+
+Each record is one JSON line, passed through the Station's `redact()` and
+written before the call that made it returns. The file is created
+readable and writable by its owner only, in a directory only its owner
+can enter. An existing file that others can read is narrowed to its
+owner; a symbolic link, or a file another user owns, is not written to.
+Each line carries `v`, the format's version, and `run` and `pid`, which
+name the process that wrote it. Past 10 MiB (`logMax`), the log moves to
+`<file>.1`, replacing an earlier one, and a new log starts. Two
+processes that rotate at the same moment can lose the older file.
+
+```sh
+station-view [--log <file>] [--port <n>] [--host <loopback>]
+```
+
+The command reads `<file>.1`, then `<file>`, then polls for what is
+appended, and serves the page and the API above, on port 8960 by default
+and on loopback only. It redacts nothing itself: it holds no secrets, and
+the log holds only what each process already redacted. It numbers
+records as it reads them, so `seq` is the command's own, and `/api/sdks`
+reports `metrics` as `null`, since those counters live in a client the
+command does not have. From a checkout, the command is
+`typescript/bin/station-view`.
+
 ## Develop
 
 The package is not on npm. It takes `@voxgig/station` 0.4.0 or later as

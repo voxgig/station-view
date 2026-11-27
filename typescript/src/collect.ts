@@ -1,3 +1,4 @@
+import { LOG_VERSION } from './log'
 
 export type Source = 'telemetry' | 'debug' | 'audit' | 'station'
 
@@ -18,6 +19,9 @@ export type TrafficRecord = {
   ok?: boolean
   ms?: number
   detail: any
+  // The process that wrote a record, when it came from a log.
+  run?: string
+  pid?: number
 }
 
 export type Filter = {
@@ -34,6 +38,7 @@ export type Watched = { name?: string, api?: string }
 export type Collector = {
   add(source: Source, from: Watched, raw: any): TrafficRecord
   station(ev: any): TrafficRecord
+  logged(line: any): TrafficRecord | undefined
   records(filter?: Filter): TrafficRecord[]
   subscribe(fn: (rec: TrafficRecord) => void): () => void
   dropped(): number
@@ -80,6 +85,14 @@ export function makecollector(max = 1000): Collector {
         ms: num(http.durationMs) ?? num(op.durationMs),
         detail: ev,
       })
+    },
+
+    logged(line) {
+      if (null == line || 'object' !== typeof line || LOG_VERSION !== line.v || 'string' !== typeof line.source) {
+        return undefined
+      }
+      const { v: _v, seq: _seq, ...rec } = line
+      return keep({ ...rec, t: num(rec.t) ?? Date.now(), detail: rec.detail })
     },
 
     records: (filter) => select(ring, filter || {}),

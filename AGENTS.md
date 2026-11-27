@@ -8,13 +8,17 @@ canonical. Only `typescript/` exists so far.
 It switches sdkgen's `telemetry`, `debug`, `audit` and `metrics` features on in
 each SDK a Station builds, through station's `sdk.feature` point and its
 `withfeature` helper, and collects what they report beside the Station's own
-events. It serves a page and a read-only JSON API on loopback. Three rules hold
-it together, and each has a test that fails without it:
+events. It serves a page and a read-only JSON API on loopback, and can append
+each record to a log that the `station-view` command serves the same page
+from. Four rules hold it together, and each has a test that fails without it:
 
 - an SDK is never handed a feature it was not generated with;
 - the server answers only a loopback `Host`, so a page elsewhere cannot rebind
   a name onto it;
-- everything the server writes passes through the Station's `redact()`.
+- everything the server writes passes through the Station's `redact()`;
+- a record reaches the log only after the Station's `redact()`, in a file only
+  its owner can read. The command holds no secrets and redacts nothing, so
+  what the log holds is what it serves.
 
 The page's script runs under a per-response nonce and writes values as text,
 never as markup.

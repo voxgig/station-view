@@ -3,10 +3,13 @@ import { BOUND_POINT, FEATURE_POINT, withfeature } from '@voxgig/station'
 
 import { makecollector, select } from './collect'
 import type { Filter, Source, TrafficRecord } from './collect'
+import { defaultlog, followlog, logpath, makelog, readlog } from './log'
 import { listen } from './server'
 import type { Listening, ListenOptions } from './server'
 
-export { select }
+export { defaultlog, followlog, logpath, readlog, select }
+export { servelog } from './cli'
+export type { ServeLogOptions } from './cli'
 export type { Filter, Listening, ListenOptions, Source, TrafficRecord }
 
 // The slice of a voxgig/station Station that the view reads.
@@ -20,7 +23,7 @@ export type StationLike = {
 
 export type BoundSdk = { name: string, api: string, descriptor: any, client: any }
 
-export type ViewOptions = { max?: number, features?: string[] }
+export type ViewOptions = { max?: number, features?: string[], log?: string | boolean, logMax?: number }
 
 export type View = {
   records(filter?: Filter): TrafficRecord[]
@@ -34,6 +37,7 @@ export type View = {
   }
   listen(opts?: ListenOptions): Promise<Listening>
   follow(): () => void
+  logfile(): string | undefined
 }
 
 // The sdkgen features the view switches on, and the option each one
@@ -52,6 +56,14 @@ export function makeview(station: StationLike, options: ViewOptions = {}): View 
   const collector = makecollector(options.max ?? 1000)
   const features = (options.features ?? Object.keys(CALLBACK)).filter((f) => f in CALLBACK)
   const bound: BoundSdk[] = []
+
+  // Each record also goes to the log, redacted, for a viewer that outlives
+  // this process (`station-view`).
+  const where = logpath(options.log)
+  if (undefined !== where) {
+    const log = makelog(where, (text) => station.redact(text), options.logMax)
+    collector.subscribe((rec) => log.write(rec))
+  }
 
   const view = {
     records: (filter?: Filter) => collector.records(filter),
@@ -98,6 +110,8 @@ export function makeview(station: StationLike, options: ViewOptions = {}): View 
     },
 
     bound(sdk: BoundSdk) { bound.push(sdk) },
+
+    logfile: () => where,
   }
   return view
 }
