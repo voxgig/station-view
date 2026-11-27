@@ -49,6 +49,19 @@ test('the page shows the traffic, live, and filters it',
       await tab.locator('#rows tr').first().click()
       Assert.match(await tab.locator('#detail').innerText(), /"status": 503/)
 
+      await tab.selectOption('select[name=status]', '')
+      await tab.selectOption('select[name=source]', '')
+      const call = await tab.locator('#rows tr td.call').first().innerText()
+      await tab.locator('#rows tr td.call').first().click()
+      Assert.strictEqual(await tab.inputValue('input[name=call]'), call)
+      await tab.waitForFunction(() => 3 === (globalThis as any).document.querySelectorAll('#rows tr').length)
+      Assert.ok((await tab.locator('#rows tr td.call').allInnerTexts()).every((text: string) => call === text))
+      await tab.locator('#rows tr td').first().click()
+      const joined = await tab.locator('#detail').innerText()
+      for (const source of ['telemetry', 'debug', 'audit']) {
+        Assert.ok(joined.includes('"source": "' + source + '"'), source + ' in ' + joined)
+      }
+
       const shot = process.env.STATION_VIEW_SCREENSHOT
       if (shot) { await tab.screenshot({ path: Path.resolve(shot), fullPage: true }) }
       Assert.deepStrictEqual(errors, [])

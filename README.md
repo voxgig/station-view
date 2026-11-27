@@ -43,7 +43,17 @@ Each record carries:
 - its source, and the SDK instance and API it came from;
 - the operation, and the method, path and status where its source knows them;
 - the duration;
+- `call`, the SDK's id for the operation, where its source carries one;
 - the record itself, as the SDK cleaned it.
+
+One call's `telemetry` span, `debug` entry and `audit` record carry the
+same `call`: sdkgen puts the operation context's id on each as
+`correlationId`. The page shows it in its last column. Clicking an id
+keeps only that call's records, and picking a record shows the call's
+records together, those of the one SDK. A Station's own `op`, `http`
+and `error` events carry its `corr` as their `call`: where the Station
+takes the SDK's id as `corr`, they join the call's other records, and
+where it counts its own, they group only its events of one operation.
 
 The view keeps the newest 1000. `use(StationView, { max, features })`
 changes the count, and which of the four features it switches on.
@@ -57,8 +67,8 @@ address it listens on.
 
 | path | answers |
 | --- | --- |
-| `/` | the page: a table of records, with filters by source, SDK, operation and status, and each record's detail |
-| `/api/records` | the records as JSON. Query: `source`, `sdk`, `op` (a substring), `status` (`2xx`, `4xx`, `5xx`, `failed` or a code), `since` (a record's `seq`), `limit` |
+| `/` | the page: a table of records, with filters by source, SDK, operation, status and call, and each record's detail |
+| `/api/records` | the records as JSON. Query: `source`, `sdk`, `op` (a substring), `status` (`2xx`, `4xx`, `5xx`, `failed` or a code), `call` (one call's id), `since` (a record's `seq`), `limit` |
 | `/api/stream` | server-sent events: the records after `since`, or after `Last-Event-ID`, then each new one |
 | `/api/sdks` | each bound SDK, with its `metrics` counters |
 

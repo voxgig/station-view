@@ -18,6 +18,9 @@ export type TrafficRecord = {
   status?: number
   ok?: boolean
   ms?: number
+  // The SDK's id for the call, which its telemetry, debug and audit records
+  // share, and a Station's events too where the Station takes it as corr.
+  call?: string
   detail: any
   // The process that wrote a record, when it came from a log.
   run?: string
@@ -29,6 +32,7 @@ export type Filter = {
   sdk?: string
   op?: string
   status?: string
+  call?: string
   since?: number
   limit?: number
 }
@@ -72,6 +76,7 @@ export function makecollector(max = 1000): Collector {
       const http = ev?.http || {}
       const op = null != ev?.op && 'object' === typeof ev.op ? ev.op : {}
       return keep({
+        call: idof(ev?.corr),
         t: num(ev?.t) ?? Date.now(),
         source: 'station',
         kind: String(ev?.kind ?? ''),
@@ -107,23 +112,24 @@ export function makecollector(max = 1000): Collector {
 }
 
 function normalize(source: Source, raw: any): Omit<TrafficRecord, 'seq' | 'sdk' | 'api' | 'detail'> {
+  const call = idof(raw?.correlationId)
   if ('telemetry' === source) {
     return {
       t: num(raw?.start) ?? Date.now(), source, kind: 'span',
-      op: raw?.name, ok: raw?.ok, ms: num(raw?.durationMs),
+      op: raw?.name, ok: raw?.ok, ms: num(raw?.durationMs), call,
     }
   }
   if ('debug' === source) {
     return {
       t: num(raw?.start) ?? Date.now(), source, kind: 'call',
       op: raw?.op, method: raw?.method, path: pathof(raw?.url),
-      status: num(raw?.status), ok: raw?.ok, ms: num(raw?.durationMs),
+      status: num(raw?.status), ok: raw?.ok, ms: num(raw?.durationMs), call,
     }
   }
   return {
     t: num(raw?.ts) ?? Date.now(), source, kind: 'audit',
     op: null == raw?.entity ? raw?.op : raw.entity + '.' + raw.op,
-    status: num(raw?.status), ok: null == raw?.outcome ? undefined : 'error' !== raw.outcome,
+    status: num(raw?.status), ok: null == raw?.outcome ? undefined : 'error' !== raw.outcome, call,
   }
 }
 
@@ -132,6 +138,7 @@ export function select(records: TrafficRecord[], filter: Filter): TrafficRecord[
     (null == filter.source || '' === filter.source || filter.source === rec.source) &&
     (null == filter.sdk || '' === filter.sdk || filter.sdk === rec.sdk) &&
     (null == filter.op || '' === filter.op || String(rec.op ?? '').includes(filter.op)) &&
+    (null == filter.call || '' === filter.call || filter.call === rec.call) &&
     (null == filter.since || filter.since < rec.seq) &&
     statusmatch(filter.status, rec))
   const limit = null == filter.limit ? out.length : Math.max(0, filter.limit)
@@ -165,6 +172,10 @@ function pathof(url: any): string | undefined {
   }
   const path = url.replace(/[?#].*$/, '')
   return path.startsWith('/') ? path : '/' + path
+}
+
+function idof(v: any): string | undefined {
+  return 'string' === typeof v && '' !== v ? v : undefined
 }
 
 function num(v: any): number | undefined {
