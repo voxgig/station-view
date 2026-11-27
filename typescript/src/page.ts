@@ -113,6 +113,7 @@ function row(rec) {
   tr.addEventListener('click', (ev) => {
     if (null != rec.call && ev.target === tr.lastChild) {
       form.elements.call.value = rec.call
+      form.elements.sdk.value = rec.sdk || ''
       render()
       return
     }
@@ -126,7 +127,7 @@ function row(rec) {
 // A record of a call shows with the call's other records.
 function joined(rec) {
   if (null == rec.call) { return rec.detail }
-  return records.filter((r) => r.call === rec.call)
+  return records.filter((r) => r.call === rec.call && r.sdk === rec.sdk)
     .map((r) => ({ source: r.source, kind: r.kind, detail: r.detail }))
 }
 

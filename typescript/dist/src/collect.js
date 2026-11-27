@@ -30,6 +30,7 @@ function makecollector(max = 1000) {
             const http = ev?.http || {};
             const op = null != ev?.op && 'object' === typeof ev.op ? ev.op : {};
             return keep({
+                call: idof(ev?.corr),
                 t: num(ev?.t) ?? Date.now(),
                 source: 'station',
                 kind: String(ev?.kind ?? ''),
@@ -60,7 +61,7 @@ function makecollector(max = 1000) {
     };
 }
 function normalize(source, raw) {
-    const call = 'string' === typeof raw?.correlationId && '' !== raw.correlationId ? raw.correlationId : undefined;
+    const call = idof(raw?.correlationId);
     if ('telemetry' === source) {
         return {
             t: num(raw?.start) ?? Date.now(), source, kind: 'span',
@@ -131,6 +132,9 @@ function pathof(url) {
     }
     const path = url.replace(/[?#].*$/, '');
     return path.startsWith('/') ? path : '/' + path;
+}
+function idof(v) {
+    return 'string' === typeof v && '' !== v ? v : undefined;
 }
 function num(v) {
     return 'number' === typeof v && Number.isFinite(v) ? v : undefined;

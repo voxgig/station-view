@@ -18,7 +18,8 @@ export type TrafficRecord = {
   status?: number
   ok?: boolean
   ms?: number
-  // sdkgen's context id, which a call's telemetry, debug and audit records share.
+  // The SDK's id for the call, which its telemetry, debug and audit records
+  // share, and a Station's events too where the Station takes it as corr.
   call?: string
   detail: any
   // The process that wrote a record, when it came from a log.
@@ -75,6 +76,7 @@ export function makecollector(max = 1000): Collector {
       const http = ev?.http || {}
       const op = null != ev?.op && 'object' === typeof ev.op ? ev.op : {}
       return keep({
+        call: idof(ev?.corr),
         t: num(ev?.t) ?? Date.now(),
         source: 'station',
         kind: String(ev?.kind ?? ''),
@@ -110,7 +112,7 @@ export function makecollector(max = 1000): Collector {
 }
 
 function normalize(source: Source, raw: any): Omit<TrafficRecord, 'seq' | 'sdk' | 'api' | 'detail'> {
-  const call = 'string' === typeof raw?.correlationId && '' !== raw.correlationId ? raw.correlationId : undefined
+  const call = idof(raw?.correlationId)
   if ('telemetry' === source) {
     return {
       t: num(raw?.start) ?? Date.now(), source, kind: 'span',
@@ -170,6 +172,10 @@ function pathof(url: any): string | undefined {
   }
   const path = url.replace(/[?#].*$/, '')
   return path.startsWith('/') ? path : '/' + path
+}
+
+function idof(v: any): string | undefined {
+  return 'string' === typeof v && '' !== v ? v : undefined
 }
 
 function num(v: any): number | undefined {

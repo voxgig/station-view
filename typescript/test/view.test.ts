@@ -86,7 +86,9 @@ test('a call\'s telemetry, debug and audit records carry its id, and a filter ke
   Assert.deepStrictEqual(one.map((r: any) => r.source).sort(), ['audit', 'debug', 'telemetry'])
   Assert.ok(one.every((r: any) => first === r.call))
   Assert.deepStrictEqual(view.records({ call: second }).map((r: any) => r.ok), [false, false, false])
-  Assert.ok(view.records({ source: 'station' }).every((r: any) => undefined === r.call))
+  const c = makecollector()
+  Assert.strictEqual(c.station({ t: 1, kind: 'op', plugin: 'solar$a', corr: first }).call, first)
+  Assert.strictEqual(c.station({ t: 1, kind: 'construct', plugin: 'solar$a' }).call, undefined)
 
   const live = await view.listen()
   try {
