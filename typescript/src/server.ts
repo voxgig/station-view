@@ -185,6 +185,7 @@ function filterof(url: URL): Filter {
     sdk: q.get('sdk') ?? undefined,
     op: q.get('op') ?? undefined,
     status: q.get('status') ?? undefined,
+    call: q.get('call') ?? undefined,
     since: num('since'),
     limit: num('limit'),
   }

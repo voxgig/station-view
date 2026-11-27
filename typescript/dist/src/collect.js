@@ -60,29 +60,31 @@ function makecollector(max = 1000) {
     };
 }
 function normalize(source, raw) {
+    const call = 'string' === typeof raw?.correlationId && '' !== raw.correlationId ? raw.correlationId : undefined;
     if ('telemetry' === source) {
         return {
             t: num(raw?.start) ?? Date.now(), source, kind: 'span',
-            op: raw?.name, ok: raw?.ok, ms: num(raw?.durationMs),
+            op: raw?.name, ok: raw?.ok, ms: num(raw?.durationMs), call,
         };
     }
     if ('debug' === source) {
         return {
             t: num(raw?.start) ?? Date.now(), source, kind: 'call',
             op: raw?.op, method: raw?.method, path: pathof(raw?.url),
-            status: num(raw?.status), ok: raw?.ok, ms: num(raw?.durationMs),
+            status: num(raw?.status), ok: raw?.ok, ms: num(raw?.durationMs), call,
         };
     }
     return {
         t: num(raw?.ts) ?? Date.now(), source, kind: 'audit',
         op: null == raw?.entity ? raw?.op : raw.entity + '.' + raw.op,
-        status: num(raw?.status), ok: null == raw?.outcome ? undefined : 'error' !== raw.outcome,
+        status: num(raw?.status), ok: null == raw?.outcome ? undefined : 'error' !== raw.outcome, call,
     };
 }
 function select(records, filter) {
     const out = records.filter((rec) => (null == filter.source || '' === filter.source || filter.source === rec.source) &&
         (null == filter.sdk || '' === filter.sdk || filter.sdk === rec.sdk) &&
         (null == filter.op || '' === filter.op || String(rec.op ?? '').includes(filter.op)) &&
+        (null == filter.call || '' === filter.call || filter.call === rec.call) &&
         (null == filter.since || filter.since < rec.seq) &&
         statusmatch(filter.status, rec));
     const limit = null == filter.limit ? out.length : Math.max(0, filter.limit);

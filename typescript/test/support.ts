@@ -14,6 +14,7 @@ export function fakeSDK(slug: string, feature?: any) {
     ...(null == feature ? {} : { feature }),
   }
   const seen: any[] = []
+  let calls = 0
   class SDK {
     _features = [{ name: 'station' }]
     _mode = 'test'
@@ -31,9 +32,11 @@ export function fakeSDK(slug: string, feature?: any) {
     }
     call(op: string, status: number) {
       const t = 1_700_000_000_000
-      this.feature.telemetry?.exporter?.({ traceId: 'a1', spanId: 'b2', name: op, start: t, end: t + 12, durationMs: 12, ok: status < 400 })
-      this.feature.debug?.onEntry?.({ op, method: 'GET', url: 'http://api.test/api/planet?q=1', headers: {}, start: t, status, ok: status < 400, durationMs: 12 })
-      this.feature.audit?.sink?.({ seq: 1, ts: t, actor: 'anonymous', entity: op.split('.')[0], op: op.split('.')[1], outcome: status < 400 ? 'ok' : 'error', status, correlationId: 'c3' })
+      const id = slug + '-C' + (++calls)
+      this.feature.telemetry?.exporter?.({ traceId: 'a1', spanId: 'b2', correlationId: id, name: op, start: t, end: t + 12, durationMs: 12, ok: status < 400 })
+      this.feature.debug?.onEntry?.({ op, correlationId: id, method: 'GET', url: 'http://api.test/api/planet?q=1', headers: {}, start: t, status, ok: status < 400, durationMs: 12 })
+      this.feature.audit?.sink?.({ seq: 1, ts: t, actor: 'anonymous', entity: op.split('.')[0], op: op.split('.')[1], outcome: status < 400 ? 'ok' : 'error', status, correlationId: id })
+      return id
     }
   }
   StationLib.provide(slug, { construct: (o: any) => new SDK(o), config })

@@ -41,6 +41,7 @@ tbody tr.picked { background: var(--pick); }
 td.ok { color: var(--ok); }
 td.bad { color: var(--bad); font-weight: 600; }
 td.num { text-align: right; }
+td.call { cursor: pointer; text-decoration: underline dotted; }
 pre { margin: 0; padding: 12px 16px; white-space: pre-wrap; word-break: break-word;
   font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
 #empty { padding: 16px; color: var(--muted); }
@@ -57,12 +58,13 @@ pre { margin: 0; padding: 12px 16px; white-space: pre-wrap; word-break: break-wo
   <label>Status<select name="status">
     <option value="">all</option><option>2xx</option><option>4xx</option>
     <option>5xx</option><option value="failed">failed</option></select></label>
+  <label>Call<input name="call" placeholder="one call's id"></label>
 </form>
 <main>
   <div class="scroll">
     <table>
       <thead><tr><th>Time</th><th>Source</th><th>SDK</th><th>Operation</th><th>Method</th>
-        <th>Path</th><th>Status</th><th>ms</th></tr></thead>
+        <th>Path</th><th>Status</th><th>ms</th><th>Call</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div id="empty">No traffic yet.</div>
@@ -84,6 +86,7 @@ function want(rec) {
   if (f.source && f.source !== rec.source) { return false }
   if (f.sdk && f.sdk !== rec.sdk) { return false }
   if (f.op && !String(rec.op || '').includes(f.op)) { return false }
+  if (f.call && f.call !== rec.call) { return false }
   if ('failed' === f.status) { return false === rec.ok }
   if (f.status) { return null != rec.status && f.status[0] === String(rec.status)[0] }
   return true
@@ -107,13 +110,26 @@ function row(rec) {
   cell(tr, rec.path)
   cell(tr, rec.status, false === rec.ok ? 'bad' : (true === rec.ok ? 'ok' : ''))
   cell(tr, null == rec.ms ? '' : Math.round(rec.ms), 'num')
+  cell(tr, rec.call, null == rec.call ? '' : 'call')
   if (picked === rec.seq) { tr.className = 'picked' }
-  tr.addEventListener('click', () => {
+  tr.addEventListener('click', (ev) => {
+    if (null != rec.call && ev.target === tr.lastChild) {
+      form.elements.call.value = rec.call
+      render()
+      return
+    }
     picked = rec.seq
-    detail.textContent = JSON.stringify(rec.detail, null, 2)
+    detail.textContent = JSON.stringify(joined(rec), null, 2)
     render()
   })
   return tr
+}
+
+// A record of a call shows with the call's other records.
+function joined(rec) {
+  if (null == rec.call) { return rec.detail }
+  return records.filter((r) => r.call === rec.call)
+    .map((r) => ({ source: r.source, kind: r.kind, detail: r.detail }))
 }
 
 function render() {

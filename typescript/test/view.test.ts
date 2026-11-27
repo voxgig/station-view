@@ -74,6 +74,32 @@ test('each call is a record from each source, labelled with its client', () => {
   st.close()
 })
 
+test('a call\'s telemetry, debug and audit records carry its id, and a filter keeps that call', async () => {
+  const full = fakeSDK('solar', FEATURES)
+  const st = station().use(StationView)
+  const client = st.connect(full.SDK, { instance: 'solar$a' })
+  const first = client.call('planet.list', 200)
+  const second = client.call('planet.list', 503)
+  const view = st.extension('view/view')
+
+  const one = view.records({ call: first })
+  Assert.deepStrictEqual(one.map((r: any) => r.source).sort(), ['audit', 'debug', 'telemetry'])
+  Assert.ok(one.every((r: any) => first === r.call))
+  Assert.deepStrictEqual(view.records({ call: second }).map((r: any) => r.ok), [false, false, false])
+  Assert.ok(view.records({ source: 'station' }).every((r: any) => undefined === r.call))
+
+  const live = await view.listen()
+  try {
+    const got = await get(live.port, '/api/records?call=' + encodeURIComponent(second))
+    Assert.deepStrictEqual(JSON.parse(got.body).map((r: any) => [r.source, r.call]).sort(),
+      [['audit', second], ['debug', second], ['telemetry', second]])
+  }
+  finally {
+    await live.close()
+    st.close()
+  }
+})
+
 test('records filter by source, client, operation, status class and sequence', () => {
   const base = { t: 0, kind: 'call', detail: {} }
   const recs: any[] = [

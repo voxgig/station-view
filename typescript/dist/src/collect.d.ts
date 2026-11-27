@@ -12,6 +12,7 @@ export type TrafficRecord = {
     status?: number;
     ok?: boolean;
     ms?: number;
+    call?: string;
     detail: any;
     run?: string;
     pid?: number;
@@ -21,6 +22,7 @@ export type Filter = {
     sdk?: string;
     op?: string;
     status?: string;
+    call?: string;
     since?: number;
     limit?: number;
 };
